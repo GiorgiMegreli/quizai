@@ -1,0 +1,16 @@
+# General
+__pycache__/
+*.pyc
+.env
+
+# Backend (Python/FastAPI)
+/backend/venv/
+/backend/.venv/
+
+# Frontend (React)
+node_modules/
+/frontend/node_modules/
+/frontend/.env
+
+# OS files
+.DS_Store
