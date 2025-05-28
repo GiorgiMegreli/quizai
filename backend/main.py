@@ -21,41 +21,57 @@ app.add_middleware(
 
 class QuizRequest(BaseModel):
     topic: str
-    questionnum: int
+    question_quantity: int
 
 
 class ExplainRequest(BaseModel):
     question: str
 
+def chat_with_model(system_prompt: str, user_prompt: str) -> str:
+    try:
+        response = ollama.chat(
+        model=MODEL_NAME,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ])
+        return response.get("message",{}).get("content" , "").strip()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI error: {e}")
+    
+
+def build_quiz_prompt(topic: str, quantity: int) -> str:
+    return (
+        f"You are a helpful assistant that generates quiz questions. "
+        f"Respond ONLY with a JSON array of {quantity} multiple-choice quiz questions about '{topic}'.\n\n"
+        f"Each question must follow this format:\n"
+        f"- 'question': a string\n"
+        f"- 'options': a list of 4 full-length answer choices (no A, B, C, D)\n"
+        f"- 'answer': exactly one of the option strings — copied **verbatim** from 'options'.\n\n"
+        f"Rules:\n"
+        f"- Do NOT include 'A.', 'B.', etc. in the options.\n"
+        f"- The 'answer' field must match one of the options exactly.\n"
+        f"- Respond only with the raw JSON. No markdown, explanation, or formatting outside the JSON."
+    )
+
+
+def build_explanation_prompt(question: str) -> str:
+    return (
+        f"Here is a quiz question:\n"
+        f"\"{question}\"\n\n"
+        "Explain the main concept this question is testing. Keep the explanation clear and under 3 sentences."
+    )
 
 @app.post("/generate")
 def generate_quiz(data: QuizRequest):
-    system_prompt = (
-    f"You are a helpful assistant in that generates quiz questions. "
-    f"Respond ONLY with a JSON array of {data.questionnum} multiple-choice quiz questions about '{data.topic}'.\n\n"
-    f"Each question must follow this format:\n"
-    f"- 'question': a string\n"
-    f"- 'options': a list of 4 full-length answer choices (do not label them as A, B, C, D)\n"
-    f"- 'answer': exactly one of the option strings — copy it **verbatim** from the 'options' list.\n\n"
-    f"Rules:\n"
-    f"- Do NOT include 'A.', 'B.', etc. in the options.\n"
-    f"- The 'answer' field must match one of the options exactly — no letters like 'A' or 'B'.\n"
-    f"- Respond only with the raw JSON. No markdown, explanation, or formatting outside the JSON."
-)
+    system_prompt = build_quiz_prompt(data.topic, data.question_quantity)
+    user_prompt = f"Generate {data.question_quantity} multiple-choice questions about {data.topic}"
+    content = chat_with_model(system_prompt, user_prompt)
+
     try:
-        response = ollama.chat(
-            model=MODEL_NAME,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Generate {data.questionnum} multiple-choice questions about {data.topic}"}
-            ]
-        )
-        content = response.get("message", {}).get("content", "").strip()
         quiz_json = json.loads(content)
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail="AI response was not valid JSON.")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
     return {"quiz": quiz_json}
 
@@ -63,29 +79,9 @@ def generate_quiz(data: QuizRequest):
 
 @app.post("/explain")
 def explain_answer(data: ExplainRequest):
-    
+    system_prompt = "You are a helpful technical assistant. When given a quiz question, your job is to briefly explain the key concept the question is about."
+    user_prompt = build_explanation_prompt(data.question)
 
-    system_prompt = (
-        "You are a helpful technical assistant. "
-        "When given a quiz question, your job is to briefly explain the key concept the question is about."
-    )
-
-    user_prompt = (
-        f"Here is a quiz question:\n"
-        f"\"{data.question}\"\n\n"
-        "Explain the main concept this question is testing. Keep the explanation clear and under 3 sentences. "
-    )
-
-    try:
-        response = ollama.chat(
-            model=MODEL_NAME,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ]
-        )
-        content = response.get("message", {}).get("content", "").strip()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI error: {e}")
+    content = chat_with_model(system_prompt, user_prompt)
 
     return {"explanation": content}
