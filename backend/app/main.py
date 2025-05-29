@@ -4,16 +4,17 @@ from pydantic import BaseModel
 import ollama
 import json
 
+from app.core.config import settings
 
-ALLOWED_ORIGINS = ["http://localhost:5173"]
-MODEL_NAME = "llama3.1"
+# ALLOWED_ORIGINS = ["http://localhost:5173"]
+# MODEL_NAME = "llama3.1"
 
-
+print(settings.allowed_origins)
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -30,7 +31,7 @@ class ExplainRequest(BaseModel):
 def chat_with_model(system_prompt: str, user_prompt: str) -> str:
     try:
         response = ollama.chat(
-        model=MODEL_NAME,
+        model=settings.model_name,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
@@ -85,3 +86,4 @@ def explain_answer(data: ExplainRequest):
     content = chat_with_model(system_prompt, user_prompt)
 
     return {"explanation": content}
+
